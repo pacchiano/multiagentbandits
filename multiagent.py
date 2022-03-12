@@ -145,7 +145,7 @@ def main():
 	timesteps = reshape_averaging(timesteps, averaging_window)
 
 
-	plt.title("Joint rewards")
+	plt.title("Joint rewards - num players {} - num arms {} ".format(num_agents, num_arms))
 	plt.plot(timesteps, mean_joint_rewards,  label = "EXP3 Agents", color = "red")
 
 	plt.fill_between(timesteps, mean_joint_rewards - .5*std_joint_rewards, 

@@ -71,6 +71,14 @@ class MultiAgentWorld:
 		return masked_arm_samples
 
 
+	def get_pseudo_rewards(self, agent_actions):
+		actions_counts = [agent_actions.count(a) for a in agent_actions]
+		mask = [count == 1 for count in actions_counts]
+		arm_samples_means = [self.arm_means[agent_action] for agent_action in agent_actions]
+		masked_arm_means = [mask[i]*arm_samples_means[i] for i in range(len(agent_actions))]
+
+		return masked_arm_means
+
 
 
 
@@ -94,13 +102,14 @@ def run_experiment(num_arms, num_agents, T, arm_means):
 		agents_actions = [agent.propose_action(learning_rate, exploration_prob) for agent, learning_rate in zip(agents, learning_rates)]
 		print("Agents actions ", agents_actions)
 		rewards = world.get_rewards(agents_actions)
+		pseudo_rewards = world.get_pseudo_rewards(agents_actions)
 		#print("Rewards ", rewards)
 		if agents_actions[0] == agents_actions[1]:
 			print("Collision!!!")
 		
 
 		[agent.update_reward_sums_bandits(reward, action, learning_rate, exploration_prob) for agent, reward, action, learning_rate in zip(agents, rewards, agents_actions, learning_rates)]
-		joint_rewards.append(np.sum(rewards))
+		joint_rewards.append(np.sum(pseudo_rewards))
 	#print("Doing stuff")
 
 
@@ -115,8 +124,8 @@ def main():
 	num_experiments = 10
 
 	num_arms = 10
-	num_agents = 4
-	T = 10000
+	num_agents = 3
+	T = 50000
 
 	averaging_window = 10
 

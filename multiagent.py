@@ -146,7 +146,7 @@ def run_experiment_remote(num_arms, num_agents, T, arm_means):
 
 def main():
 	num_experiments = 2
-	T = 100000
+	T = 1000000
 
 	averaging_window = 10
 

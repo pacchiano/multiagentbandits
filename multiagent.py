@@ -47,6 +47,10 @@ class AgentEXP3:
 			# 	cont.prec = 100
 			# 	IPython.embed()
 			# 	probability_distribution = [float(Decimal(x)/Decimal(normalization_factor)) for x in potentials]
+		if np.sum(probability_distribution) < .0001:
+			max_index = np.argmax(potentials)
+			probability_distribution = np.zeros(len(potentials))
+			probability_distribution[max_index] = 1.0
 		return probability_distribution
 
 	def propose_action(self, learning_rate, exploration_prob):

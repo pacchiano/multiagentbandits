@@ -1,5 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import ray
+import IPython
+from decimal import Decimal, localcontext
+
+ray.init()
+USE_RAY = True
 
 def reshape_averaging(input_list, averaging_window):
 	return np.mean(input_list.reshape(-1, averaging_window), axis = 1)
@@ -15,7 +21,8 @@ def multinomial_sample(prob_distribution):
 		if rand_value < cum_sum + prob_distribution[i]:
 			return i
 		cum_sum += prob_distribution[i]
-	raise ValueError("Something strange happened ", "rand value ", rand_value, " cum sum ", cum_sum)
+
+	raise ValueError("Something strange happened ", "rand value ", rand_value, " cum sum ", cum_sum, " prob distribution ", prob_distribution)
 
 class AgentEXP3:
 	def __init__(self, num_arms ):
@@ -26,8 +33,20 @@ class AgentEXP3:
 	def get_probability_distribution(self, learning_rate):
 		potentials = [np.exp(learning_rate*self.reward_sums[i] ) for i in range(self.num_arms) ]
 		normalization_factor = np.sum(potentials)
-
+		print("potentials ", potentials)
+		print("reward sums ", self.reward_sums)
 		probability_distribution = [x/normalization_factor for x in potentials]
+		nan_map = np.isnan(probability_distribution)
+		print("nan map ", nan_map)
+		print("normalization factor ", normalization_factor)
+		if nan_map.any():
+			#IPython.embed()
+			return nan_map*1.0/np.sum(nan_map)
+			# with localcontext() as cont:
+
+			# 	cont.prec = 100
+			# 	IPython.embed()
+			# 	probability_distribution = [float(Decimal(x)/Decimal(normalization_factor)) for x in potentials]
 		return probability_distribution
 
 	def propose_action(self, learning_rate, exploration_prob):
@@ -104,7 +123,8 @@ def run_experiment(num_arms, num_agents, T, arm_means):
 		rewards = world.get_rewards(agents_actions)
 		pseudo_rewards = world.get_pseudo_rewards(agents_actions)
 		#print("Rewards ", rewards)
-		if agents_actions[0] == agents_actions[1]:
+		## This only works for the two agent case.
+		if len(set(agents_actions)) != num_agents:
 			print("Collision!!!")
 		
 
@@ -118,55 +138,70 @@ def run_experiment(num_arms, num_agents, T, arm_means):
 
 
 
+@ray.remote
+def run_experiment_remote(num_arms, num_agents, T, arm_means):
+	return run_experiment(num_arms, num_agents, T, arm_means)
+
 
 
 def main():
-	num_experiments = 10
-
-	num_arms = 10
-	num_agents = 3
-	T = 50000
+	num_experiments = 2
+	T = 100000
 
 	averaging_window = 10
 
-	arm_means  = (np.arange(10) + 5)/15.0
+	nums_arms = [10, 20]
+	nums_agents = [2,3, 4]
 
-	list_arm_means = list(arm_means)
-	list_arm_means.sort()
-	list_arm_means.reverse()
+	for num_arms in nums_arms:
+		for num_agents in nums_agents:
+			arm_means  = (np.arange(num_arms) + 5)/(num_arms*3.0/2)
 
-	optimal_reward =  np.sum(list_arm_means[:num_agents])
+			list_arm_means = list(arm_means)
+			list_arm_means.sort()
+			list_arm_means.reverse()
 
-	joint_rewards_all = []
-	for _ in range(num_experiments):
-		joint_rewards_all.append(run_experiment(num_arms, num_agents, T, arm_means))
-
-	#IPython.embed()
-	joint_rewards_all_numpy = np.array(joint_rewards_all)
+			optimal_reward =  np.sum(list_arm_means[:num_agents])
 
 
-	timesteps = np.arange(T)+1
-	mean_joint_rewards = joint_rewards_all_numpy.mean( axis = 0 )
-	std_joint_rewards = joint_rewards_all_numpy.std( axis = 0 )
-	
-	mean_joint_rewards = reshape_averaging(mean_joint_rewards, averaging_window)
-	std_joint_rewards = reshape_averaging(std_joint_rewards, averaging_window)
-	timesteps = reshape_averaging(timesteps, averaging_window)
+			#joint_rewards_all = []
+			
+			if USE_RAY:
+				joint_rewards_all = [run_experiment_remote.remote(num_arms, num_agents, T, arm_means) for _ in range(num_experiments)]
+				joint_rewards_all = ray.get(joint_rewards_all)
+			else:
+				joint_rewards_all = [run_experiment(num_arms, num_agents, T, arm_means) for _ in range(num_experiments)]
+
+			# for _ in range(num_experiments):
+			# 	joint_rewards_all.append(run_experiment(num_arms, num_agents, T, arm_means))
+
+			#IPython.embed()
+			joint_rewards_all_numpy = np.array(joint_rewards_all)
 
 
-	plt.title("Joint rewards - num players {} - num arms {} ".format(num_agents, num_arms))
-	plt.plot(timesteps, mean_joint_rewards,  label = "EXP3 Agents", color = "red")
+			timesteps = np.arange(T)+1
+			mean_joint_rewards = joint_rewards_all_numpy.mean( axis = 0 )
+			std_joint_rewards = joint_rewards_all_numpy.std( axis = 0 )
+			
+			mean_joint_rewards = reshape_averaging(mean_joint_rewards, averaging_window)
+			std_joint_rewards = reshape_averaging(std_joint_rewards, averaging_window)
+			timesteps = reshape_averaging(timesteps, averaging_window)
 
-	plt.fill_between(timesteps, mean_joint_rewards - .5*std_joint_rewards, 
-			mean_joint_rewards + .5*std_joint_rewards, color = "red", alpha = .2)
+
+			plt.title("Joint rewards - num players {} - num arms {} ".format(num_agents, num_arms))
+			plt.plot(timesteps, mean_joint_rewards,  label = "EXP3 Agents", color = "red")
+
+			plt.fill_between(timesteps, mean_joint_rewards - .5*std_joint_rewards, 
+					mean_joint_rewards + .5*std_joint_rewards, color = "red", alpha = .2)
 
 
-	plt.plot(np.arange(T)+1, [optimal_reward]*T, label = "Optimal Reward", color = "black")
-	plt.legend(loc = "lower right")
-	plt.xlabel("Timesteps")
-	plt.ylabel("Agents' reward")
-	plt.show()
+			plt.plot(np.arange(T)+1, [optimal_reward]*T, label = "Optimal Reward", color = "black")
+			plt.legend(loc = "lower right")
+			plt.xlabel("Timesteps")
+			plt.ylabel("Agents' reward")
+			plt.savefig("./figs/multiagent_T{}_A{}_M{}.png".format(T, num_arms, num_agents))
 
+			plt.close("all")
 
 
 

@@ -38,6 +38,7 @@ class AgentEXP3:
 		probability_distribution = [x/normalization_factor for x in potentials]
 		nan_map = np.isnan(probability_distribution)
 		print("nan map ", nan_map)
+		print("probability distribution ", probability_distribution)
 		print("normalization factor ", normalization_factor)
 		if nan_map.any():
 			#IPython.embed()
